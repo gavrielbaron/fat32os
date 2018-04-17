@@ -48,6 +48,11 @@ public class Fat32Reader {
             }
             else if(commandLine.equalsIgnoreCase("size")){
                 System.out.print("Going to size!\n");
+                try{
+                	f.size(input[1]);
+                }catch (ArrayIndexOutOfBoundsException e){
+                	System.out.println("Input a file!");
+                }
             }
             else if(commandLine.equalsIgnoreCase("cd")){
                 System.out.print("Going to cd!\n");
@@ -249,6 +254,18 @@ public class Fat32Reader {
         }
         System.out.println("Error: volume name not found!");
     }
+
+    public void size(String fileName){
+    	for (Directory dir : dirList){
+            if(dir.getName().equalsIgnoreCase(fileName)) {
+                System.out.println("Size is " + dir.getSize());
+                return;
+            }
+    	}
+    	System.out.println("Error: file not found!");
+    }
+
+
 
 }
 
