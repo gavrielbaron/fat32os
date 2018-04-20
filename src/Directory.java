@@ -1,6 +1,6 @@
 import java.util.ArrayList;
 
-public class Directory {
+public class Directory implements Comparable<Directory> {
     private String name;
     private int dirAttribute;
     private int size;
@@ -52,5 +52,10 @@ public class Directory {
 
     public boolean isFile() {
         return file;
+    }
+
+    @Override
+    public int compareTo(Directory o) {
+        return this.name.compareTo(o.name);
     }
 }

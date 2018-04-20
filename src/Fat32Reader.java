@@ -14,13 +14,13 @@ import java.util.*;
 
 public class Fat32Reader {
     private int BPB_BytsPerSec, BPB_SecPerClus, BPB_RsvdSecCnt, BPB_NumFATs, BPB_FATSz32, bytesPerCluster, BPB_RootClus;
-    private int  BPB_RootEntCnt, RootDirSectors, FirstDataSector, FATOffSet, FatSecNum, FATEntOffset, FirstSectorofCluster, N;
-    private int FirstSectorofRootCluster;
-    //private ArrayList<Directory> dirList = new ArrayList<Directory>();
+    private int  BPB_RootEntCnt, RootDirSectors, FirstDataSector, FATOffSet, FatSecNum, FATEntOffset, FirstSectorofCluster;
+    private int N, FirstSectorofRootCluster, FatTableStart;
     private Directory root;
     private Directory currentDir;
     private String currentDirName = "";
     private HashMap<String, Boolean> names = new HashMap<>();
+    private HashSet<String> name = new HashSet<>();
 
     public static void main(String[] args) throws IOException {
         Fat32Reader f = new Fat32Reader();
@@ -65,14 +65,19 @@ public class Fat32Reader {
                 }
             }
             else if(commandLine.equalsIgnoreCase("ls")){
-                try{
+                /* try{
                     f.ls(input[1]);
                 }catch (ArrayIndexOutOfBoundsException e){
                     System.out.println("Input a file!");
-                }
+                }*/
+                f.ls();
             }
             else if(commandLine.equalsIgnoreCase("read")){
-                System.out.print("Going to read!\n");
+                try{
+                    f.read(input[1], args[0], input[2], input[3]);
+                }catch (ArrayIndexOutOfBoundsException e){
+                    System.out.println("Input a file and lower and upper bounds! (3 args)");
+                }
             }
             else if(commandLine.equalsIgnoreCase("volume")){
                 //System.out.print("Going to volume!\n");
@@ -103,6 +108,8 @@ public class Fat32Reader {
         RootDirSectors = ((BPB_RootEntCnt * 32) + (BPB_BytsPerSec - 1)) / BPB_BytsPerSec;
         FirstDataSector = BPB_RsvdSecCnt + (BPB_NumFATs * BPB_FATSz32) + RootDirSectors;
         FirstSectorofRootCluster = ((BPB_RootClus - 2) * BPB_SecPerClus) + FirstDataSector;
+
+
         //int  FirstSectorofCluster = ((N - 2) * BPB_SecPerClus) + FirstDataSector;
         updateDirList(path);
     }
@@ -227,8 +234,7 @@ public class Fat32Reader {
     /**
      * Prints out each file name unless it's the "free" file, the volume Id (i.e. the root) or a hidden file.
      */
-    public void ls(String path) throws IOException{
-        if(path.equals(".")) {
+    public void ls() throws IOException{
             for (Directory directory : currentDir.getChildren()) {
                 int attr = directory.getDirAttribute();
                 if (attr != 8 && directory.getName().charAt(0) != (char) 65533 && attr != 2) {
@@ -236,7 +242,7 @@ public class Fat32Reader {
                 }
 
             }
-        }
+
         System.out.println();
 
     }
@@ -300,12 +306,16 @@ public class Fat32Reader {
                 }
                 else if(fileName.equals(dir.getName()) && !dir.isFile()){
                     System.out.println("Doing the cd'ing now...");
-                    getNewFileInfo(dir, fileName, path);
+                    if (name.add(fileName)) {
+                        getNewFileInfo(dir, fileName, path);
+                        Collections.sort(currentDir.getChildren());
+                    } else currentDir = dir;
+                    currentDirName = fileName + "/";
                     return;
                 }
 
             }
-            System.out.println("Error: does not exist ");
+            System.out.println("Error: does not exist!");
 
         }
 
@@ -313,37 +323,101 @@ public class Fat32Reader {
 
     public void getNewFileInfo(Directory dir, String fileName, String path) throws IOException{
         currentDir = dir;
+        //int startOfDir = 0;
+        ArrayList<Integer> dirStarts = new ArrayList<>();
         N = firstClusterNumber(dir);
+        getDirStarts(dirStarts, path, N);
+        for(int k = 0; k < dirStarts.size(); k++) {
+            int j = 0;
+            int startOfDir = dirStarts.get(k);
+            if(k <= 0) {
+                for (int i = startOfDir; i < startOfDir + bytesPerCluster; i += 64) {
+                    int dirAttribute = getBytes(path, i + 11, 1);
+                    int size = getBytes(path, i + 28, 4);
+                    String low = Integer.toHexString(getBytes(path, i + 26, 2));
+                    String hi = Integer.toHexString(getBytes(path, i + 20, 2));
+                    String currentName = getStringFromBytes(path, i, 11);
+                    if (currentName.contains("\u0000")) {
+
+                    } else {
+                        String finalName = Normalizer.normalize(makeNamePretty(currentName, dirAttribute), Normalizer.Form.NFD);
+                        currentDir.getChildren().add(new Directory(finalName, dirAttribute, size, low, hi, currentDir));
+                    }
+                    if (j++ < 1) i -= 32;
+                }
+            } else{
+                for (int i = startOfDir + 32; i < startOfDir + bytesPerCluster; i += 64) {
+                    int dirAttribute = getBytes(path, i + 11, 1);
+                    int size = getBytes(path, i + 28, 4);
+                    String low = Integer.toHexString(getBytes(path, i + 26, 2));
+                    String hi = Integer.toHexString(getBytes(path, i + 20, 2));
+                    String currentName = getStringFromBytes(path, i, 11);
+                    if (currentName.contains("\u0000")) {
+
+                    } else {
+                        String finalName = Normalizer.normalize(makeNamePretty(currentName, dirAttribute), Normalizer.Form.NFD);
+                        currentDir.getChildren().add(new Directory(finalName, dirAttribute, size, low, hi, currentDir));
+                    }
+                }
+            }
+        }
+    }
+
+    public void getDirStarts(ArrayList<Integer> a, String path, int next) throws IOException{
+        N = next;
         FATOffSet = N * 4;
         FatSecNum = BPB_RsvdSecCnt + (FATOffSet / BPB_BytsPerSec);
+        FatTableStart = FatSecNum * BPB_BytsPerSec;
         FATEntOffset = FATOffSet % BPB_BytsPerSec;
-        int firstSectorofDirCluster = ((N - 2) * BPB_SecPerClus) + FirstDataSector;
-        int startOfDir = firstSectorofDirCluster * BPB_BytsPerSec;
-        
-
-        //TODO need to figure out how to read thru the files and access the FAT given these above numbers
-
-        /*
-        for(int i = startOfDir; i < startOfDir + bytesPerCluster; i+=32){
-            int dirAttribute = getBytes(path, i + 11,1);
-            int size = getBytes(path, i + 28, 4);
-            String low = Integer.toHexString(getBytes(path, i + 26, 2));
-            String hi = Integer.toHexString(getBytes(path, i + 20, 2));
-            String currentName = getStringFromBytes(path, i, 11);
-            if (currentName.contains("\u0000")){
-
-            }
-            else {
-                String finalName = Normalizer.normalize(makeNamePretty(currentName, dirAttribute), Normalizer.Form.NFD);
-                currentDir.getChildren().add(new Directory(finalName, dirAttribute, size, low, hi, currentDir));
-            }
-            */
-
-
-        
+        int clusterOffset = FATEntOffset + FatTableStart;
+        int nextClus = getBytes(path, clusterOffset, 4);
+        if (nextClus > 268435447) {
+            int firstSectorofDirCluster = ((N - 2) * BPB_SecPerClus) + FirstDataSector;
+            int startOfDir = firstSectorofDirCluster * BPB_BytsPerSec;
+            a.add(startOfDir);
+        } else {
+            int firstSectorofDirCluster = ((N - 2) * BPB_SecPerClus) + FirstDataSector;
+            int startOfDir = firstSectorofDirCluster * BPB_BytsPerSec;
+            a.add(startOfDir);
+            getDirStarts(a, path, nextClus);
+        }
 
     }
 
+    public void read(String fileName, String path, String lower, String upper) throws IOException{
+        for(Directory dir : currentDir.getChildren()){
+            if(fileName.equals(dir.getName()) && !dir.isFile()){
+                System.out.println("Error: not a File!"); return;
+            }
+            else if(fileName.equals(dir.getName()) && dir.isFile()){
+                read(dir, path, lower, upper);
+                return;
+            }
+
+        }
+        System.out.println("Error: does not exist!");
+    }
+
+    public void read(Directory dir, String path, String lower, String upper) throws IOException {
+        int lo = Integer.parseInt(lower);
+        int hi = Integer.parseInt(upper);
+        if (hi - lo > dir.getSize() || lo < 0 || hi < 0 || lo > hi) {
+            System.out.println("Error: attempt to read beyond end of file");
+            return;
+        }
+        N = firstClusterNumber(dir);
+        //ArrayList<Integer> dirStarts = new ArrayList<>();
+        //getDirStarts(dirStarts, path, N);
+        //int j = dirStarts.get(dirStarts.size() - 1) - dirStarts.get(0) + 512;
+        FATOffSet = N * 4;
+        int firstSectorofDirCluster = ((N - 2) * BPB_SecPerClus) + FirstDataSector;
+        int startOfDir = firstSectorofDirCluster * BPB_BytsPerSec;
+        String s = getStringFromBytes(path, startOfDir + lo, hi );
+        char k = s.charAt(s.length() - 1);
+        String finalString = s.replaceAll("\u0000", "");
+        System.out.println(finalString);
+
+    }
 
 }
 
