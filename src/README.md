@@ -18,7 +18,7 @@ Challenges: This was a very challenging assignment overall. One big issue was fi
  CD was especially challenging due to issues regarding keeping track of where in the fat32.img we were in.
 This led to our idea of having "currentDir" as one of our fields, as it felt like the easiest way to keep track of where we were. It also took a while to figure out how exactly to access the FAT table and read it. 
 
-Resources: fat32spec.pdf 
+Resources: The fat32spec.pdf, as well as all the lecture slides. Also the following links
 https://www.pjrc.com/tech/8051/ide/fat32.html https://stackoverflow.com/questions/24423816/convert-unicode-string-to-ascii-in-java-which-works-in-unix-linux https://stackoverflow.com/questions/5886619/hexadecimal-to-integer-in-java
 
 Also came in handy was a hex reader in order to read the bytes in the file. For the Mac we used iHex.
