@@ -20,15 +20,17 @@ public class Fat32Reader {
     private Directory currentDir;
     private String currentDirName = "";
     private HashSet<String> name = new HashSet<>();
+    List<Integer> freeClustersList = new ArrayList<>();
     private byte[] data;
     private byte[] FAT;
+    Path p;
 
     public static void main(String[] args) throws IOException {
         Fat32Reader f = new Fat32Reader();
         //Start up the calculations for this fileSystem including the BPBs and the characteristics
         // of each file.
-        Path p = Paths.get(args[0]);
-        f.data = Files.readAllBytes(p); // byte array of entire fat32.img
+        f.p = Paths.get(args[0]);
+        f.data = Files.readAllBytes(f.p); // byte array of entire fat32.img
         f.initiate(); //finds and reads the root before we execute any commands. Basically like a constructor.
         String commandLine;
         while(true){
@@ -92,7 +94,11 @@ public class Fat32Reader {
                 }
             }
             else if(commandLine.equalsIgnoreCase("delete")){
-
+                try{
+                    f.delete(input[1]);
+                }catch (ArrayIndexOutOfBoundsException e){
+                    System.out.println("Input a file!");
+                }
             }
             else{
                 System.out.print("Unrecognized command!\n");
@@ -158,19 +164,7 @@ public class Fat32Reader {
         }
     }
 
-    public int setNextCluster(int N){
-        FATOffSet = N * 4;
-        FatSecNum = BPB_RsvdSecCnt + (FATOffSet / BPB_BytsPerSec);
-        FatTableStart = FatSecNum * BPB_BytsPerSec;
-        FATEntOffset = FATOffSet % BPB_BytsPerSec;
-        int clusterOffset = FATEntOffset + FatTableStart;
-        int nextClus = getBytes(clusterOffset, 4);
-        if(nextClus <= 268435447) {
-            setNextCluster(nextClus);
-        }
-        else return N;
-        return 0;
-    }
+
     /**
      * This method fixes up the file name making sure to add the "." and erase any empty space.
      * every 8th index there should be a dot which comes before the extension.
@@ -212,6 +206,7 @@ public class Fat32Reader {
         int result = Integer.parseInt(hex, 16);
         return result;
     }
+
     /**
      * This method reads through the bytes and determines the resulting string given when reading
      * the bytes in the proper endian-ness.
@@ -435,19 +430,25 @@ public class Fat32Reader {
 
     public void freeList(){
        // int endOfFATOffset = (BPB_FATSz32 * BPB_BytsPerSec) + FatTableStart;
-        List<Integer> list = new ArrayList<>();
+
         int count = 0;
-        for(int i = FatTableStart; i < endOfFATOffset; i+=BPB_BytsPerSec){
-            int j = getBytes(i, 4); // check if the index is equal to 0, i.e. is empty
-            if(j == 0){
+        int j = 0;
+        for(int i = FatTableStart; i < endOfFATOffset; i+=4){
+            j++;
+            // check if the index is equal to 0, i.e. is empty
+            if(getBytes(i, 4) == 0){
                 count++;
-                list.add(i / 4);
-                if(list.size() == 3) {
-                    System.out.println("Indexes of first 3 free clusters : " + list);
+                freeClustersList.add(j);
+                if(freeClustersList.size() == 3) {
+                    System.out.println("Indexes of first 3 free clusters : " + freeClustersList);
                 }
             }
+            if(j == BPB_FATSz32){
+
+            }
         }
-        System.out.println("Amount of free clusters: " + count);
+        System.out.println("Amount of free clusters: " + count); return;
+
 
     }
 
@@ -508,4 +509,52 @@ public class Fat32Reader {
         System.out.println();
 
     }
+
+    public void delete(String name) throws IOException{
+        int i = 0;
+        for( ;i < currentDir.getChildren().size() - 1; i++){
+            if(name.equalsIgnoreCase(currentDir.getChildren().get(i).getName())){
+                delete(currentDir.getChildren().get(i));
+                Files.write(p, data);
+                currentDir.getChildren().remove(i);
+                return;
+            }
+        }
+        System.out.println("Error: File does not exist!");
+
+
+
+    }
+
+    private void delete(Directory dir){
+        N = firstClusterNumber(dir);
+        deleteClusters(N);
+
+
+    }
+    private void deleteClusters(int N){
+        FATOffSet = N * 4;
+        FatSecNum = BPB_RsvdSecCnt + (FATOffSet / BPB_BytsPerSec);
+        FatTableStart = FatSecNum * BPB_BytsPerSec;
+        FATEntOffset = FATOffSet % BPB_BytsPerSec;
+        int clusterOffset = FATEntOffset + FatTableStart;
+        int nextClus = getBytes(clusterOffset, 4);
+        if(nextClus <= 268435447) {
+            zeroOutBytes(clusterOffset, 4);
+            deleteClusters(nextClus);
+        }
+        else{
+            zeroOutBytes(clusterOffset, 4);
+        }
+
+    }
+
+    public void zeroOutBytes(int offset, int size){
+        for(int i = offset; i < offset + size; i++){
+            System.out.println(data[i]);
+            data[i] = (byte) 0;
+        }
+    }
+
+
 }
