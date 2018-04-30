@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 OS Project 3 fully completed April 22, 2018
+=======
+OS Project 3 fully completed April 22, 2018 
+>>>>>>> 91cebe035f98991b6a32692997be5d79d101ae97
 
 Group members: Jonah Taurog and Gavriel Baron.
 
@@ -14,8 +18,13 @@ To run the commands just type the commands as you would in a command line as dic
 
 Challenges: This was a very challenging assignment overall. One big issue was figuring out how to use the right endian-ness and "parsing" the bytes to read correctly. That was the building block for finding all the BPB values. Another issue was being able to understand where everything was in the file. Hence, it took a lot of time to craft the loops and to know where to start and end. Yet another challenge was figuring out what to print and what not to print. The secret file was confusing but in the end we found a way to make sure it wasn't printed. CD was especially challenging due to issues regarding keeping track of where in the fat32.img we were in. This led to our idea of having "currentDir" as one of our fields, as it felt like the easiest way to keep track of where we were. It also took a while to figure out how exactly to access the FAT table and read it.
 
+<<<<<<< HEAD
 Resources: The fat32spec.pdf, as well as all the lecture slides. Also the following links https://www.pjrc.com/tech/8051/ide/fat32.html 
 https://stackoverflow.com/questions/24423816/convert-unicode-string-to-ascii-in-java-which-works-in-unix-linux 
 https://stackoverflow.com/questions/5886619/hexadecimal-to-integer-in-java
+=======
+Resources: The fat32spec.pdf, as well as all the lecture slides. Also the following links
+https://www.pjrc.com/tech/8051/ide/fat32.html https://stackoverflow.com/questions/24423816/convert-unicode-string-to-ascii-in-java-which-works-in-unix-linux https://stackoverflow.com/questions/5886619/hexadecimal-to-integer-in-java
+>>>>>>> 91cebe035f98991b6a32692997be5d79d101ae97
 
 Also came in handy was a hex reader in order to read the bytes in the file. For the Mac we used iHex.
