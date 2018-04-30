@@ -5,6 +5,7 @@
  */
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -14,12 +15,13 @@ import java.util.*;
 public class Fat32Reader {
     private int BPB_BytsPerSec, BPB_SecPerClus, BPB_RsvdSecCnt, BPB_NumFATs, BPB_FATSz32, bytesPerCluster, BPB_RootClus;
     private int BPB_RootEntCnt, RootDirSectors, FirstDataSector, FATOffSet, FatSecNum, FATEntOffset;
-    private int N, FirstSectorofRootCluster, FatTableStart;
+    private int N, FirstSectorofRootCluster, FatTableStart, endOfFATOffset;
     private Directory root;
     private Directory currentDir;
     private String currentDirName = "";
     private HashSet<String> name = new HashSet<>();
     private byte[] data;
+    private byte[] FAT;
 
     public static void main(String[] args) throws IOException {
         Fat32Reader f = new Fat32Reader();
@@ -79,6 +81,19 @@ public class Fat32Reader {
                 System.exit(0);
 
             }
+            else if(commandLine.equalsIgnoreCase("freelist")){
+                f.freeList();
+            }
+            else if(commandLine.equalsIgnoreCase("newfile")){
+                try{
+                    f.newfile(input[1], input[2]);
+                }catch (ArrayIndexOutOfBoundsException e){
+                    System.out.println("Input a file name and size! (2 args)");
+                }
+            }
+            else if(commandLine.equalsIgnoreCase("delete")){
+
+            }
             else{
                 System.out.print("Unrecognized command!\n");
             }
@@ -98,6 +113,16 @@ public class Fat32Reader {
         RootDirSectors = ((BPB_RootEntCnt * 32) + (BPB_BytsPerSec - 1)) / BPB_BytsPerSec;
         FirstDataSector = BPB_RsvdSecCnt + (BPB_NumFATs * BPB_FATSz32) + RootDirSectors;
         FirstSectorofRootCluster = ((BPB_RootClus - 2) * BPB_SecPerClus) + FirstDataSector;
+        FATOffSet = BPB_RootClus * 4;
+        FatSecNum = BPB_RsvdSecCnt + (FATOffSet / BPB_BytsPerSec);
+        FatTableStart = FatSecNum * BPB_BytsPerSec;
+        endOfFATOffset = (BPB_FATSz32 * BPB_BytsPerSec) + FatTableStart;
+        FAT = new byte[endOfFATOffset - FatTableStart];
+        int count = 0;
+        for(int i = FatTableStart; i < endOfFATOffset; i++){
+            FAT[count] = data[i];
+            count++;
+        }
         updateDirList();
     }
     /**
@@ -116,7 +141,7 @@ public class Fat32Reader {
             String low = Integer.toHexString(getBytes(i + 26, 2));
             String hi = Integer.toHexString(getBytes(i + 20, 2));
             String currentName = getStringFromBytes( i, 11);
-            if (!currentName.contains("\u0000")){
+            if (!(currentName.contains("\u0000") && getBytes(i, 4 ) == 0)){
                 String finalName = Normalizer.normalize(makeNamePretty(currentName, dirAttribute), Normalizer.Form.NFD);
                 if (dirAttribute == 8) {
                     root = new Directory(finalName, dirAttribute, size, low, hi, null);
@@ -125,7 +150,26 @@ public class Fat32Reader {
                     root.getChildren().add(new Directory(finalName, dirAttribute, size, low, hi, root));
                 }
             }
+            else{
+                root.setNextFreeOffset(i);
+                root.setNextFreeCluster(2);
+                break;
+            }
         }
+    }
+
+    public int setNextCluster(int N){
+        FATOffSet = N * 4;
+        FatSecNum = BPB_RsvdSecCnt + (FATOffSet / BPB_BytsPerSec);
+        FatTableStart = FatSecNum * BPB_BytsPerSec;
+        FATEntOffset = FATOffSet % BPB_BytsPerSec;
+        int clusterOffset = FATEntOffset + FatTableStart;
+        int nextClus = getBytes(clusterOffset, 4);
+        if(nextClus <= 268435447) {
+            setNextCluster(nextClus);
+        }
+        else return N;
+        return 0;
     }
     /**
      * This method fixes up the file name making sure to add the "." and erase any empty space.
@@ -154,7 +198,7 @@ public class Fat32Reader {
     }
     /**
      * This method reads through the bytes and determines the bytes
-     * in the correct endian-ness given an offset and a size. A important method
+     * in the correct endian-ness given an offset and a size. An important method
      * which is the basis for the entire program.
      */
     public int getBytes(int offset, int size) {
@@ -208,7 +252,7 @@ public class Fat32Reader {
     public void ls() {
         for (Directory directory : currentDir.getChildren()) {
             int attr = directory.getDirAttribute();
-            if (attr != 8 && directory.getName().charAt(0) != (char) 65533 && attr != 2) {
+            if (attr != 8 && directory.getName().charAt(0) != (char) 65533 && directory.getName().charAt(0) != (char)227 && attr != 2) {
                 System.out.print(directory.getName() + "   ");
             }
         }
@@ -353,6 +397,7 @@ public class Fat32Reader {
             getDirStarts(a, nextClus);
         }
     }
+
     /**
      *this read method parses the command and if the exists reads it.
      */
@@ -386,5 +431,81 @@ public class Fat32Reader {
         String s = getStringFromBytes(startOfDir + lo, hi );
         String finalString = s.replaceAll("\u0000", "");
         System.out.println(finalString);
+    }
+
+    public void freeList(){
+       // int endOfFATOffset = (BPB_FATSz32 * BPB_BytsPerSec) + FatTableStart;
+        List<Integer> list = new ArrayList<>();
+        int count = 0;
+        for(int i = FatTableStart; i < endOfFATOffset; i+=BPB_BytsPerSec){
+            int j = getBytes(i, 4); // check if the index is equal to 0, i.e. is empty
+            if(j == 0){
+                count++;
+                list.add(i / 4);
+                if(list.size() == 3) {
+                    System.out.println("Indexes of first 3 free clusters : " + list);
+                }
+            }
+        }
+        System.out.println("Amount of free clusters: " + count);
+
+    }
+
+    public void newfile(String name, String size){
+        int lengthOfName = name.length() - 4;
+        if(name.charAt(lengthOfName) != '.' || name.length() > 11){
+            System.out.println("You need an extention!"); return;
+        }
+        char[] name2 = new char[11];
+        int i;
+        for(i = 0; i < 8; i++){
+            if(i < lengthOfName) {
+                name2[i] = name.charAt(i);
+            } else{
+                name2[i] = (char)32;
+            }
+        }
+        for(int j = i; j < 11; j++) {
+            name2[j] = name.charAt(lengthOfName + 1);
+            lengthOfName++;
+        }
+        String newName = String.valueOf(name2);
+        int s = Integer.parseInt(size);
+        makeNewFile(newName, s);
+    }
+
+    //https://stackoverflow.com/questions/2183240/java-integer-to-byte-array
+    public void makeNewFile(String name, int size){
+        name = name.toUpperCase();
+        byte[] newFile = new byte[64];
+        byte[] fileName = name.getBytes();
+        for(int i = 0; i < fileName.length; i++){
+            newFile[i] = fileName[i];
+        }
+        //newFile[27] = (byte) size;
+        newFile[11] = 32; //ordinary folder
+        byte[] sizeArr = ByteBuffer.allocate(4).putInt(size).array();
+        int count = 27;
+        for(int i = 3; i >= 0; i--){ //putting in fileArr backwards to maintain endian-ness
+            newFile[count] = sizeArr[i];
+            count++;
+        }
+        String low, high;
+        int n = size / bytesPerCluster;
+        if(n == 0){
+            low = String.valueOf(currentDir.getChildren().get(currentDir.getChildren().size() - 1).getNextFreeOffset());
+        }
+
+
+
+
+        /*
+        int count1 = 0;
+        for(int i = currentDir.getNextFreeOffset(); i < currentDir.getNextFreeOffset() + 64; i++){
+            data[i] = newFile[count1];
+            count1++;
+        }*/
+        System.out.println();
+
     }
 }

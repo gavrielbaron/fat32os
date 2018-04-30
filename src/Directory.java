@@ -9,7 +9,8 @@ public class Directory implements Comparable<Directory> {
     private ArrayList<Directory> children = new ArrayList<>();
     private Directory parent;
     private boolean file;
-
+    private int nextFreeOffset;
+    private int nextFreeCluster;
 
     public Directory(String name, int dirAttribute, int size, String low, String high, Directory parent){
         this.name = name;
@@ -52,6 +53,25 @@ public class Directory implements Comparable<Directory> {
 
     public boolean isFile() {
         return file;
+    }
+
+    public void setNextFreeOffset(int nextFreeOffset) {
+        if(!isFile()) {
+            this.nextFreeOffset = nextFreeOffset;
+        }
+        else this.nextFreeOffset = Integer.parseInt(null);
+    }
+
+    public int getNextFreeOffset() {
+        return nextFreeOffset;
+    }
+
+    public void setNextFreeCluster(int nextFreeCluster) {
+        this.nextFreeCluster = nextFreeCluster;
+    }
+
+    public int getNextFreeCluster() {
+        return nextFreeCluster;
     }
 
     @Override
