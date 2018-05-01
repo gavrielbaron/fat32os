@@ -84,7 +84,12 @@ public class Fat32Reader {
 
             }
             else if(commandLine.equalsIgnoreCase("freelist")){
-                f.freeList();
+                List list = f.freeList();
+                System.out.print("First 3 free clusters: ");
+                for(int i = 0; i < 3; i++){
+                    System.out.print(list.get(i) + "  ");
+                }
+                System.out.println("\nAmount of free clusters: " + list.size());
             }
             else if(commandLine.equalsIgnoreCase("newfile")){
                 try{
@@ -433,9 +438,9 @@ public class Fat32Reader {
         System.out.println(finalString);
     }
 
-    public void freeList(){
+    public List<Integer> freeList(){
        // int endOfFATOffset = (BPB_FATSz32 * BPB_BytsPerSec) + FatTableStart;
-
+        //ArrayList<Integer> list = new ArrayList<>();
         int count = 0;
         int j = 0;
         for(int i = FatTableStart; i < endOfFATOffset; i+=4){
@@ -445,14 +450,13 @@ public class Fat32Reader {
                 count++;
                 freeClustersList.add(j);
                 if(freeClustersList.size() == 3) {
-                    System.out.println("Indexes of first 3 free clusters : " + freeClustersList);
+                   // System.out.println("Indexes of first 3 free clusters : " + freeClustersList);
                 }
             }
-            if(j == BPB_FATSz32){
 
-            }
         }
-        System.out.println("Amount of free clusters: " + count); return;
+        //System.out.println("Amount of free clusters: " + count);
+        return freeClustersList;
 
 
     }
