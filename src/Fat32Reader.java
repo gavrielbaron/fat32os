@@ -5,6 +5,7 @@
  */
 
 import java.io.IOException;
+import java.math.BigInteger;
 import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -93,7 +94,8 @@ public class Fat32Reader {
             }
             else if(commandLine.equalsIgnoreCase("newfile")){
                 try{
-                    f.newfile(input[1], input[2]);
+                    //f.newFile(input[1], input[2]);
+                    f.newFileDetails("helloworld", 512);
                 }catch (ArrayIndexOutOfBoundsException e){
                     System.out.println("Input a file name and size! (2 args)");
                 }
@@ -162,8 +164,8 @@ public class Fat32Reader {
                 }
             }
             else{
-             //   root.setNextFreeOffset(i);
-               // root.setNextFreeCluster(2);
+                //   root.setNextFreeOffset(i);
+                // root.setNextFreeCluster(2);
                 break;
             }
         }
@@ -225,9 +227,9 @@ public class Fat32Reader {
         }
         String s = new String(newData); // turns byte array into string. Java's gift to humanity
         if(newData[0] == -27){
-           char[] charArry = s.toCharArray();
-           charArry[0] = (char)229;
-           s = String.valueOf(charArry);
+            char[] charArry = s.toCharArray();
+            charArry[0] = (char)229;
+            s = String.valueOf(charArry);
         }
         return s;
     }
@@ -439,7 +441,7 @@ public class Fat32Reader {
     }
 
     public List<Integer> freeList(){
-       // int endOfFATOffset = (BPB_FATSz32 * BPB_BytsPerSec) + FatTableStart;
+        // int endOfFATOffset = (BPB_FATSz32 * BPB_BytsPerSec) + FatTableStart;
         //ArrayList<Integer> list = new ArrayList<>();
         int count = 0;
         int j = 0;
@@ -450,7 +452,7 @@ public class Fat32Reader {
                 count++;
                 freeClustersList.add(j);
                 if(freeClustersList.size() == 3) {
-                   // System.out.println("Indexes of first 3 free clusters : " + freeClustersList);
+                    // System.out.println("Indexes of first 3 free clusters : " + freeClustersList);
                 }
             }
 
@@ -461,7 +463,7 @@ public class Fat32Reader {
 
     }
 
-    public void newfile(String name, String size){
+    public void newFile(String name, String size){
         int lengthOfName = name.length() - 4;
         if(name.charAt(lengthOfName) != '.' || name.length() > 11){
             System.out.println("You need an extention!"); return;
@@ -505,10 +507,6 @@ public class Fat32Reader {
         if(n == 0){
             low = String.valueOf(currentDir.getChildren().get(currentDir.getChildren().size() - 1).getNextFreeOffset());
         }
-
-
-
-
         /*
         int count1 = 0;
         for(int i = currentDir.getNextFreeOffset(); i < currentDir.getNextFreeOffset() + 64; i++){
@@ -517,6 +515,48 @@ public class Fat32Reader {
         }*/
         System.out.println();
 
+    }
+    /* so far this method gets the cluster number and correctly sets the high and low
+     * I think we need to make setters for high and low, what do you think?
+     * TODO make a setHigh and setLow
+     */
+    public void newFileDetails(String name, int size){
+        List<Integer> list = freeList();
+        int clusterNumber = list.get(0);
+        String hex = Integer.toHexString(clusterNumber);
+        //char[] temp = hex.toCharArray();
+        char[] temp = hex.toCharArray();
+        char[] hexes = new char[8];
+        for(int i = 0; i < hexes.length; i++){
+            hexes[i] = '0';
+        }
+        String high = "";
+        String low = "";
+        int i = temp.length - 1;
+        int h = hexes.length - 1;
+        while(i > -1){
+            hexes[h] = temp[i];
+            h--;
+            i--;
+        }
+        for(i = 0; i < 4; i += 2){
+            high = "" + hexes[i] + hexes[i + 1] + high;
+        }
+        for(i = 4; i < 8; i += 2){
+            low = "" + hexes[i] + hexes[i + 1] + low;
+        }
+        /*
+        int clusterSpan = (int) Math.ceil(size / 512);
+        if (clusterSpan > 0){
+
+            //TODO
+            //span the clusters then at last cluster put eoc
+        }
+        else{
+            //TODO
+            //put eoc
+        }
+        */
     }
 
     public void delete(String name) throws IOException{
@@ -577,7 +617,7 @@ public class Fat32Reader {
 
     public void zeroOutBytes(int offset, int size){
         for(int i = offset; i < offset + size; i++){
-           // System.out.println(data[i]);
+            // System.out.println(data[i]);
             data[i] = (byte) 0;
         }
     }
