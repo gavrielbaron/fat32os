@@ -146,19 +146,19 @@ public class Fat32Reader {
             int size = getBytes(i + 28, 4);
             String low = Integer.toHexString(getBytes(i + 26, 2));
             String hi = Integer.toHexString(getBytes(i + 20, 2));
-            String currentName = getStringFromBytes( i, 11);
+            String currentName = getStringFromBytes(i, 11);
             if (!(currentName.contains("\u0000") && getBytes(i, 4 ) == 0)){
-                String finalName = Normalizer.normalize(makeNamePretty(currentName, dirAttribute), Normalizer.Form.NFD);
+                String finalName = makeNamePretty(currentName, dirAttribute);
                 if (dirAttribute == 8) {
-                    root = new Directory(finalName, dirAttribute, size, low, hi, null);
+                    root = new Directory(finalName, dirAttribute, size, low, hi, null, i);
                     currentDir = root;
                 } else {
-                    root.getChildren().add(new Directory(finalName, dirAttribute, size, low, hi, root));
+                    root.getChildren().add(new Directory(finalName, dirAttribute, size, low, hi, root, i));
                 }
             }
             else{
-                root.setNextFreeOffset(i);
-                root.setNextFreeCluster(2);
+             //   root.setNextFreeOffset(i);
+               // root.setNextFreeCluster(2);
                 break;
             }
         }
@@ -219,7 +219,11 @@ public class Fat32Reader {
             j--;
         }
         String s = new String(newData); // turns byte array into string. Java's gift to humanity
-        Normalizer.normalize(s, Normalizer.Form.NFD);
+        if(newData[0] == -27){
+           char[] charArry = s.toCharArray();
+           charArry[0] = (char)229;
+           s = String.valueOf(charArry);
+        }
         return s;
     }
     /**
@@ -247,7 +251,8 @@ public class Fat32Reader {
     public void ls() {
         for (Directory directory : currentDir.getChildren()) {
             int attr = directory.getDirAttribute();
-            if (attr != 8 && directory.getName().charAt(0) != (char) 65533 && directory.getName().charAt(0) != (char)227 && attr != 2) {
+            String name = directory.getName();
+            if (attr != 8 && name.charAt(0) != (char)65533 && name.charAt(0) != (char)229 && attr != 2) {
                 System.out.print(directory.getName() + "   ");
             }
         }
@@ -320,6 +325,7 @@ public class Fat32Reader {
                     //Hashset containing all the names. if we already cd'ed into the file, no reason to re-perform all the calculations
                     if (name.add(fileName)) {
                         getNewFileInfo(dir);
+                        currentDir = dir;
                         Collections.sort(currentDir.getChildren());
                     } else currentDir = dir;
                     currentDirName = fileName + "/";
@@ -330,14 +336,13 @@ public class Fat32Reader {
         }
     }
     /**
-     *The main method of cd. we first use the low and high numbers of the file to check if it spans multiple clusters.
+     *The main method of to read files. we first use the low and high numbers of the file to check if it spans multiple clusters.
      * If it does, we collect the beginnings of each cluster and read through it. We then collect all the information about
      * each file, similar to what was done when we read through the root. We then set the currentDir as the cd'ed dir.
      * We keep in mind that in the first cluster the "." and ".." are 32 bytes apart and then the rest of the files
      * are 64 bytes apart.
      */
     public void getNewFileInfo(Directory dir){
-        currentDir = dir;
         ArrayList<Integer> dirStarts = new ArrayList<>();
         N = firstClusterNumber(dir);
         getDirStarts(dirStarts, N);
@@ -353,7 +358,7 @@ public class Fat32Reader {
                     String currentName = getStringFromBytes(i, 11);
                     if (!currentName.contains("\u0000")) {
                         String finalName = Normalizer.normalize(makeNamePretty(currentName, dirAttribute), Normalizer.Form.NFD);
-                        currentDir.getChildren().add(new Directory(finalName, dirAttribute, size, low, hi, currentDir));
+                        dir.getChildren().add(new Directory(finalName, dirAttribute, size, low, hi, dir));
                     }
                     if (j++ < 1) i -= 32;
                 }
@@ -366,7 +371,7 @@ public class Fat32Reader {
                     String currentName = getStringFromBytes(i, 11);
                     if (!currentName.contains("\u0000")) {
                         String finalName = Normalizer.normalize(makeNamePretty(currentName, dirAttribute), Normalizer.Form.NFD);
-                        currentDir.getChildren().add(new Directory(finalName, dirAttribute, size, low, hi, currentDir));
+                        dir.getChildren().add(new Directory(finalName, dirAttribute, size, low, hi, dir));
                     }
                 }
             }
@@ -512,14 +517,22 @@ public class Fat32Reader {
 
     public void delete(String name) throws IOException{
         int i = 0;
-        for( ;i < currentDir.getChildren().size() - 1; i++){
+        for( ;i < currentDir.getChildren().size(); i++){
             if(name.equalsIgnoreCase(currentDir.getChildren().get(i).getName())){
                 delete(currentDir.getChildren().get(i));
-                Files.write(p, data);
+                data[currentDir.getChildren().get(i).getOffsetInParent()] =(byte)229;
                 currentDir.getChildren().remove(i);
+                Files.write(p, data);
                 return;
             }
-        }
+        }/*
+        for(Directory dir : currentDir.getChildren()){
+            if(name.equalsIgnoreCase(dir.getName())){
+                delete(dir);
+                data[dir.getOffsetInParent()] = (byte)229;
+
+            }
+        } */
         System.out.println("Error: File does not exist!");
 
 
@@ -527,10 +540,19 @@ public class Fat32Reader {
     }
 
     private void delete(Directory dir){
+        if(!dir.isFile()){
+            //meaning if dir is a folder, we have to go deeper and delete them too
+            if (name.add(dir.getName())) {
+                getNewFileInfo(dir);
+            }
+            for(Directory d : dir.getChildren()){
+                delete(d);
+
+            }
+            return;
+        }
         N = firstClusterNumber(dir);
         deleteClusters(N);
-
-
     }
     private void deleteClusters(int N){
         FATOffSet = N * 4;
@@ -551,7 +573,7 @@ public class Fat32Reader {
 
     public void zeroOutBytes(int offset, int size){
         for(int i = offset; i < offset + size; i++){
-            System.out.println(data[i]);
+           // System.out.println(data[i]);
             data[i] = (byte) 0;
         }
     }
