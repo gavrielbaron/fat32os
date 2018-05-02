@@ -93,5 +93,11 @@ public class Directory implements Comparable<Directory> {
         return offsetInParent;
     }
 
+    public void setLow(String low) {
+        this.low = low;
+    }
 
+    public void setHigh(String high) {
+        this.high = high;
+    }
 }
