@@ -97,11 +97,8 @@ public class Directory implements Comparable<Directory> {
         this.low = low;
     }
 
-<<<<<<< HEAD
     public void setHigh(String high) {
         this.high = high;
     }
 }
-=======
-}
->>>>>>> 48065c1c859bba912427f5d7143b802f22dd51e4
+
