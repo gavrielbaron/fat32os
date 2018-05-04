@@ -565,6 +565,20 @@ public class Fat32Reader {
 
     }
     public void updateTime(byte[] newFile){
+<<<<<<< HEAD
+=======
+        String date = new SimpleDateFormat("HHmmss").format(Calendar.getInstance().getTime());
+        int time = Integer.valueOf(date.substring(0, date.length() -1));
+        byte[] times = ByteBuffer.allocate(4).putInt(time).array();
+        int a = 15, b = 17, c = 19, d = 23, e = 25;
+        for(int i = 2; i < 4; i++){
+        newFile[a] = times[i];
+        newFile[b] = times[i];
+        newFile[c] = times[i];
+        newFile[d] = times[i];
+        newFile[e] = times[i];
+        a--; b--; c--; d--; e--;
+>>>>>>> c0e65f471fd79d47cbb5be29758ad6c543c21f6b
 
         String time = new SimpleDateFormat("HHmmss").format(new Date());
         int hour = Integer.valueOf(time.substring(0,2)) * 1024 ;
