@@ -141,29 +141,33 @@ public class Fat32Reader {
      * This method also gathers the info about each file in the root and puts each file Object (Directory) in an array
      */
     public void updateDirList() {
-        int startOfRootDirectory = FirstSectorofRootCluster * BPB_BytsPerSec;
+        ArrayList<Integer> rootStarts = new ArrayList<>();
+        getDirStarts(rootStarts, BPB_RootClus);
+        //int startOfRootDirectory = FirstSectorofRootCluster * BPB_BytsPerSec;
         bytesPerCluster = BPB_BytsPerSec * BPB_SecPerClus;
-        for(int i = startOfRootDirectory; i < startOfRootDirectory + bytesPerCluster; i+=64){
-            int dirAttribute = getBytes(i + 11,1);
-            int size = getBytes(i + 28, 4);
-            String low = Integer.toHexString(getBytes(i + 26, 2));
-            String hi = Integer.toHexString(getBytes(i + 20, 2));
-            String currentName = getStringFromBytes(i, 11);
-            if (!(currentName.contains("\u0000") && getBytes(i, 4 ) == 0)){
-                String finalName = makeNamePretty(currentName, dirAttribute);
-                if (dirAttribute == 8) {
-                    root = new Directory(finalName, dirAttribute, size, low, hi, null, i);
-                    currentDir = root;
+        for(int j : rootStarts) {
+            for (int i = j; i < j + bytesPerCluster; i += 64) {
+                int dirAttribute = getBytes(i + 11, 1);
+                int size = getBytes(i + 28, 4);
+                String low = Integer.toHexString(getBytes(i + 26, 2));
+                String hi = Integer.toHexString(getBytes(i + 20, 2));
+                String currentName = getStringFromBytes(i, 11);
+                if (!(currentName.contains("\u0000") && getBytes(i, 4) == 0)) {
+                    String finalName = makeNamePretty(currentName, dirAttribute);
+                    if (dirAttribute == 8) {
+                        root = new Directory(finalName, dirAttribute, size, "2", hi, null, i);
+                        currentDir = root;
+                    } else {
+                        root.getChildren().add(new Directory(finalName, dirAttribute, size, low, hi, root, i));
+                    }
                 } else {
-                    root.getChildren().add(new Directory(finalName, dirAttribute, size, low, hi, root, i));
+                    //   root.setNextFreeOffset(i);
+                    // root.setNextFreeCluster(2);
+                    break;
                 }
             }
-            else{
-             //   root.setNextFreeOffset(i);
-               // root.setNextFreeCluster(2);
-                break;
-            }
         }
+        Collections.sort(currentDir.getChildren());
     }
 
 
@@ -491,7 +495,12 @@ public class Fat32Reader {
      * parses the name of the new file to make it 11 bytes long.
      */
     public void newfile(String name, String size) throws IOException{
-
+        for(Directory dir : currentDir.getChildren()){
+            if(name.equals(dir.getName())){
+                System.out.println(name + " is already taken! Choose a different name");
+                return;
+            }
+        }
         int s = Integer.parseInt(size);
         if(name.contains(".")) {
             int lengthOfName = name.length() - 4;
@@ -568,9 +577,9 @@ public class Fat32Reader {
 
         Directory dir = new Directory(name, 32, size, low, high, currentDir, offsetOfFileInParent);
         currentDir.getChildren().add(dir);
+        insertionSort(currentDir.getChildren()); //most of the files are sorted except new one, so can use insertion
         writeFileToDrive(dir);
         Files.write(this.p, this.data);
-
 
     }
     /**
@@ -709,25 +718,54 @@ public class Fat32Reader {
     /**
      * edits the main byte array of the entire disk with the 64 byte array info
      */
-    public int writeFile(byte[] newFile){
-        int highest = 0, count = 0;
-        for(int i = 0; i < currentDir.getChildren().size(); i++){
+    public int writeFile(byte[] newFile)throws IOException{
+        int highest = 0, count = 0, clusterControl = 64;
+        ArrayList<Integer> dirStarts = new ArrayList<>();
+        N = firstClusterNumber(currentDir);
+        getDirStarts(dirStarts, N);
+        int start = dirStarts.get(dirStarts.size() - 1);
+            for (int i = start; i < start + bytesPerCluster; i+=64) {
+                if(data[i] == -27){
+                    for(int j = 0; j < 64; j++){
+                        data[i] = newFile[j];
+                        i++;
+                    }
+                    //System.exit(0);
+                    return start;
+                }
+                if(getBytes(i, 4) == 0){
+                    for(int j = 0; j < 64; j++){
+                        data[i] = newFile[j];
+                        i++;
+                    }
+                    //System.exit(0);
+                    return start;
+                }
+            }
 
-            if(currentDir.getChildren().get(i).getName().charAt(0) == (char)229){
-                highest = currentDir.getChildren().get(i).getOffsetInParent() - 64;
-                currentDir.getChildren().remove(i); //deletes the hidden file
-                break;
-            }
-            if(currentDir.getChildren().get(i).getOffsetInParent() > highest){
-                highest = currentDir.getChildren().get(i).getOffsetInParent();
-            }
-        }
-        highest += 64;
+            //if we reach down here it means the current cluster is full and we need a new one
+        freeList();
+        N = firstClusterNumber(currentDir);
+        FATOffSet = N * 4;
+        FatSecNum = BPB_RsvdSecCnt + (FATOffSet / BPB_BytsPerSec);
+        FATEntOffset = FATOffSet % BPB_BytsPerSec;
+        int clusterOffset = FATOffSet + FatTableStart;
+        addBytesOnFAT(clusterOffset, 4, freeClustersList.get(0));
+        N = freeClustersList.get(0);
+        FATOffSet = N * 4;
+        FatSecNum = BPB_RsvdSecCnt + (FATOffSet / BPB_BytsPerSec);
+        FATEntOffset = FATOffSet % BPB_BytsPerSec;
+        clusterOffset = FATOffSet + FatTableStart;
+        eocBytesOnFAT(clusterOffset, 4);
+        int firstSectorofDirCluster = ((N - 2) * BPB_SecPerClus) + FirstDataSector;
+        highest = (firstSectorofDirCluster * BPB_BytsPerSec);
         for(int i = highest; i < highest + 64; i++){
             data[i] = newFile[count];
             count++;
         }
+        //System.exit(0);
         return highest;
+
     }
     /**
      * The first delete method after typing "delete" in the command line.
@@ -834,6 +872,23 @@ public class Fat32Reader {
             data[i] = arr[count];
             data[i + FATSIZE] = arr[count];
             count++;
+        }
+    }
+    //stackoverflow.com/questions/17432738/insertion-sort-using-string-compareto
+    public void insertionSort(ArrayList<Directory> arr){
+        int i,j;
+        Directory key;
+        for (j = 1; j < arr.size(); j++) { //the condition has changed
+            key = arr.get(j);
+            i = j - 1;
+            while (i >= 0) {
+                if (key.compareTo(arr.get(i)) > 0) {//here too
+                    break;
+                }
+                arr.set(i + 1, arr.get(i));
+                i--;
+            }
+            arr.set(i + 1, key);
         }
     }
 
