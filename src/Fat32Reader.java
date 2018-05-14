@@ -1,7 +1,7 @@
 /**
  * @author      Jonah Taurog and Gavriel Baron
- * @version     1.0
- * @date        4/22/2018
+ * @version     1.1
+ * @date        5/14/2018
  */
 
 import java.io.IOException;
@@ -9,7 +9,7 @@ import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.text.Normalizer;
+//import java.text.Normalizer;
 import java.text.SimpleDateFormat;
 
 import java.util.*;
@@ -370,7 +370,7 @@ public class Fat32Reader {
                     String currentName = getStringFromBytes(i, 11);
                     if (!currentName.contains("\u0000")) {
                         if(currentName.charAt(0) != (char)229) {
-                            String finalName = Normalizer.normalize(makeNamePretty(currentName, dirAttribute), Normalizer.Form.NFD);
+                            String finalName = makeNamePretty(currentName, dirAttribute);
                             dir.getChildren().add(new Directory(finalName, dirAttribute, size, low, hi, dir, i));
                         }
                     }
@@ -385,7 +385,7 @@ public class Fat32Reader {
                     String currentName = getStringFromBytes(i, 11);
                     if (!currentName.contains("\u0000")) {
                         if(currentName.charAt(0) != (char)229) {
-                            String finalName = Normalizer.normalize(makeNamePretty(currentName, dirAttribute), Normalizer.Form.NFD);
+                            String finalName =makeNamePretty(currentName, dirAttribute);
                             dir.getChildren().add(new Directory(finalName, dirAttribute, size, low, hi, dir, i));
                         }
                     }
