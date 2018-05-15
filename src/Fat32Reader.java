@@ -9,10 +9,6 @@ import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-<<<<<<< HEAD
-=======
-//import java.text.Normalizer;
->>>>>>> 3c5492886edb5551c964e05078ada061c03573c5
 import java.text.SimpleDateFormat;
 import java.util.*;
 
@@ -145,10 +141,6 @@ public class Fat32Reader {
     public void updateDirList() {
         ArrayList<Integer> rootStarts = new ArrayList<>();
         getDirStarts(rootStarts, BPB_RootClus);
-<<<<<<< HEAD
-=======
-        //int startOfRootDirectory = FirstSectorofRootCluster * BPB_BytsPerSec;
->>>>>>> 3c5492886edb5551c964e05078ada061c03573c5
         bytesPerCluster = BPB_BytsPerSec * BPB_SecPerClus;
         for(int j : rootStarts) {
             for (int i = j; i < j + bytesPerCluster; i += 64) {
@@ -165,15 +157,7 @@ public class Fat32Reader {
                     } else {
                         root.getChildren().add(new Directory(finalName, dirAttribute, size, low, hi, root, i));
                     }
-<<<<<<< HEAD
-                } 
-=======
-                } else {
-                    //   root.setNextFreeOffset(i);
-                    // root.setNextFreeCluster(2);
-                    break;
                 }
->>>>>>> 3c5492886edb5551c964e05078ada061c03573c5
             }
         }
         Collections.sort(currentDir.getChildren());
@@ -343,12 +327,8 @@ public class Fat32Reader {
                     return;
                 }
                 else if(fileName.equals(dir.getName()) && !dir.isFile()){
-<<<<<<< HEAD
                     //Hashset containing all the names.
                     // if we already cd'ed into the file, no reason to re-perform all the costly calculations
-=======
-                    //Hashset containing all the names. if we already cd'ed into the file, no reason to re-perform all the calculations
->>>>>>> 3c5492886edb5551c964e05078ada061c03573c5
                     if (nameMap.add(fileName)) {
                         getNewFileInfo(dir);
                         currentDir = dir;
@@ -445,11 +425,7 @@ public class Fat32Reader {
         System.out.println("Error: does not exist!");
     }
     /**
-<<<<<<< HEAD
      * This was a complicated method, which prints out the file according to the limits given. We gather all the clusters
-=======
-     * This is a complicated method, which prints out the file according to the limits given. We gather all the clusters
->>>>>>> 3c5492886edb5551c964e05078ada061c03573c5
      * that file is in and read from it. If our lower limit isn't until a few clusters in, then we skip the first clusters
      * until we are in the cluster we need to be in. Then we start reading and appending as many clusters as we need
      * until the higher limit. Then we print it all out.
@@ -604,10 +580,6 @@ public class Fat32Reader {
      *This method write the string ""New File.\r\n" to the file over and over in each of the clusters until
      * we read the size limit.
      */
-<<<<<<< HEAD
-=======
-
->>>>>>> 3c5492886edb5551c964e05078ada061c03573c5
     public void writeFileToDrive(Directory dir){
         int size = dir.getSize();
         ArrayList<Integer> dirStarts = new ArrayList<>();
@@ -633,11 +605,8 @@ public class Fat32Reader {
     }
     /**
      *The method that sets the time and date bytes according to the Fatspec PDF.
-<<<<<<< HEAD
      * We only dealt with the "last modified" date and time and left the "created"
      * date and time with 0 bytes.
-=======
->>>>>>> 3c5492886edb5551c964e05078ada061c03573c5
      */
     public void updateTime(byte[] newFile){
 
@@ -666,12 +635,6 @@ public class Fat32Reader {
         newFile[24] = b1;
         newFile[25] = b2;
 
-<<<<<<< HEAD
-=======
-
-
-
->>>>>>> 3c5492886edb5551c964e05078ada061c03573c5
     }
     /**
      *Updates the FAT with info regarding info of the new file.
@@ -745,7 +708,6 @@ public class Fat32Reader {
      * edits the main byte array of the entire disk with the 64 byte array info
      */
     public int writeFile(byte[] newFile)throws IOException{
-<<<<<<< HEAD
         int highest, count = 0;
         ArrayList<Integer> dirStarts = new ArrayList<>();
         N = firstClusterNumber(currentDir);
@@ -768,31 +730,6 @@ public class Fat32Reader {
                 }
             }
         }
-=======
-        int highest = 0, count = 0, clusterControl = 64;
-        ArrayList<Integer> dirStarts = new ArrayList<>();
-        N = firstClusterNumber(currentDir);
-        getDirStarts(dirStarts, N);
-        int start = dirStarts.get(dirStarts.size() - 1);
-            for (int i = start; i < start + bytesPerCluster; i+=64) {
-                if(data[i] == -27){
-                    for(int j = 0; j < 64; j++){
-                        data[i] = newFile[j];
-                        i++;
-                    }
-                    //System.exit(0);
-                    return start;
-                }
-                if(getBytes(i, 4) == 0){
-                    for(int j = 0; j < 64; j++){
-                        data[i] = newFile[j];
-                        i++;
-                    }
-                    //System.exit(0);
-                    return start;
-                }
-            }
->>>>>>> 3c5492886edb5551c964e05078ada061c03573c5
 
             //if we reach down here it means the current cluster is full and we need a new one
         freeList();
@@ -814,7 +751,6 @@ public class Fat32Reader {
             data[i] = newFile[count];
             count++;
         }
-        //System.exit(0);
         return highest;
 
     }
@@ -839,12 +775,8 @@ public class Fat32Reader {
      *This is a complicated method which deletes both files and folders using recursion. If it's a file,
      * delete it and edit the FAT. Otherwise if it's a folder, go into to the folder and recursively delete
      * its contents. For debugging purposes I have the program print the name and type of file delete to
-<<<<<<< HEAD
      * see if the recursion is working properly and I believe it does. For example, when I delete "dir", it goes
      * and deletes dir's files as well as "spec" and "fatspec.pdf" (which lie in "a")
-=======
-     * see if the recursion is working properly and I believe it does.
->>>>>>> 3c5492886edb5551c964e05078ada061c03573c5
      */
     private void delete(Directory dir){
         if(!dir.isFile()){
@@ -862,23 +794,14 @@ public class Fat32Reader {
             //System.out.print("folder deleted: " + dir.getName());
             N = firstClusterNumber(dir);
             deleteClusters(N);
-<<<<<<< HEAD
-=======
-            System.out.println("   " +nameMap.remove(dir.getName()));
->>>>>>> 3c5492886edb5551c964e05078ada061c03573c5
             return;
         }
 
         //System.out.println("file deleted: " + dir.getName());
         N = firstClusterNumber(dir);
         deleteClusters(N);
-<<<<<<< HEAD
     }
 
-=======
-        System.out.println("   " +nameMap.remove(dir.getName()));
-    }
->>>>>>> 3c5492886edb5551c964e05078ada061c03573c5
     /**
      *Another recursive method that deletes contents in the FAT, continuing to the next index
      * if it isn't an EOC.
@@ -932,26 +855,18 @@ public class Fat32Reader {
      */
     private void editBytesOnFAT(int offset, int size, byte[] arr, int count) {
         for(int i = offset + size - 1; i >= offset; i--){
-<<<<<<< HEAD
-=======
-            //System.out.println(data[i]);
->>>>>>> 3c5492886edb5551c964e05078ada061c03573c5
             data[i] = arr[count];
             data[i + FATSIZE] = arr[count]; //edit both FATs
             count++;
         }
     }
     //stackoverflow.com/questions/17432738/insertion-sort-using-string-compareto
-<<<<<<< HEAD
     /**
      * We use insertion sort whenever we write new file. The reason being that insertion sort is super
      * fast when most of the file is already sorted and all we need to do is sort that new file
      * into place
      */
     private void insertionSort(ArrayList<Directory> arr){
-=======
-    public void insertionSort(ArrayList<Directory> arr){
->>>>>>> 3c5492886edb5551c964e05078ada061c03573c5
         int i,j;
         Directory key;
         for (j = 1; j < arr.size(); j++) { //the condition has changed
