@@ -7,17 +7,6 @@ public class Directory implements Comparable<Directory> {
     private Directory parent;
     private boolean file;
 
-
-    public Directory(String name, int dirAttribute, int size, String low, String high, Directory parent){
-        this.name = name;
-        this.dirAttribute = dirAttribute;
-        this.size = size;
-        this.low = low;
-        this.high = high;
-        this.file = !(dirAttribute == 8 || dirAttribute == 16);
-        this.parent = parent;
-    }
-
     public Directory(String name, int dirAttribute, int size, String low, String high, Directory parent, int offsetInParent){
         this.name = name;
         this.dirAttribute = dirAttribute;
@@ -27,6 +16,11 @@ public class Directory implements Comparable<Directory> {
         this.file = !(dirAttribute == 8 || dirAttribute == 16);
         this.parent = parent;
         this.offsetInParent = offsetInParent;
+    }
+
+    @Override
+    public int compareTo(Directory o) {
+        return this.name.compareTo(o.name);
     }
 
     public int getDirAttribute() {
@@ -80,11 +74,6 @@ public class Directory implements Comparable<Directory> {
         return nextFreeCluster;
     }
 
-    @Override
-    public int compareTo(Directory o) {
-        return this.name.compareTo(o.name);
-    }
-
     public void setOffsetInParent(int offsetInParent) {
         this.offsetInParent = offsetInParent;
     }
@@ -101,4 +90,3 @@ public class Directory implements Comparable<Directory> {
         this.high = high;
     }
 }
-

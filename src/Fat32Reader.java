@@ -1,7 +1,7 @@
 /**
  * @author      Jonah Taurog and Gavriel Baron
- * @version     1.0
- * @date        4/22/2018
+ * @version     1.1
+ * @date        5/14/2018
  */
 
 import java.io.IOException;
@@ -9,9 +9,7 @@ import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.text.Normalizer;
 import java.text.SimpleDateFormat;
-
 import java.util.*;
 
 public class Fat32Reader {
@@ -19,13 +17,13 @@ public class Fat32Reader {
     private int BPB_RootEntCnt, RootDirSectors, FirstDataSector, FATOffSet, FatSecNum, FATEntOffset;
     private int N, FirstSectorofRootCluster, FatTableStart, endOfFATOffset;
     private final int FATSIZE = 516608;
-    private Directory root;
+    private Directory root; //the root of our file system tree
     private Directory currentDir;
     private String currentDirName = "";
-    private final String newFileContents = "New File.\r\n";
-    private HashSet<String> name = new HashSet<>();
+    private final String newFileContents = "New File.\r\n"; //the string to be inputted over and over in new files
+    private HashSet<String> nameMap = new HashSet<>();
     private List<Integer> freeClustersList = new ArrayList<>();
-    private byte[] data;
+    private byte[] data; //the entirety of the FAT32 disk image
     private Path p;
 
     public static void main(String[] args) throws IOException {
@@ -141,29 +139,28 @@ public class Fat32Reader {
      * This method also gathers the info about each file in the root and puts each file Object (Directory) in an array
      */
     public void updateDirList() {
-        int startOfRootDirectory = FirstSectorofRootCluster * BPB_BytsPerSec;
+        ArrayList<Integer> rootStarts = new ArrayList<>();
+        getDirStarts(rootStarts, BPB_RootClus);
         bytesPerCluster = BPB_BytsPerSec * BPB_SecPerClus;
-        for(int i = startOfRootDirectory; i < startOfRootDirectory + bytesPerCluster; i+=64){
-            int dirAttribute = getBytes(i + 11,1);
-            int size = getBytes(i + 28, 4);
-            String low = Integer.toHexString(getBytes(i + 26, 2));
-            String hi = Integer.toHexString(getBytes(i + 20, 2));
-            String currentName = getStringFromBytes(i, 11);
-            if (!(currentName.contains("\u0000") && getBytes(i, 4 ) == 0)){
-                String finalName = makeNamePretty(currentName, dirAttribute);
-                if (dirAttribute == 8) {
-                    root = new Directory(finalName, dirAttribute, size, low, hi, null, i);
-                    currentDir = root;
-                } else {
-                    root.getChildren().add(new Directory(finalName, dirAttribute, size, low, hi, root, i));
-                }
-            }
-            else{
-             //   root.setNextFreeOffset(i);
-               // root.setNextFreeCluster(2);
-                break;
+        for(int j : rootStarts) {
+            for (int i = j; i < j + bytesPerCluster; i += 64) {
+                int dirAttribute = getBytes(i + 11, 1);
+                int size = getBytes(i + 28, 4);
+                String low = Integer.toHexString(getBytes(i + 26, 2));
+                String hi = Integer.toHexString(getBytes(i + 20, 2));
+                String currentName = getStringFromBytes(i, 11);
+                if (!(currentName.contains("\u0000") && getBytes(i, 4) == 0)) {
+                    String finalName = makeNamePretty(currentName, dirAttribute);
+                    if (dirAttribute == 8) {
+                        root = new Directory(finalName, dirAttribute, size, "2", hi, null, i);
+                        currentDir = root;
+                    } else {
+                        root.getChildren().add(new Directory(finalName, dirAttribute, size, low, hi, root, i));
+                    }
+                } 
             }
         }
+        Collections.sort(currentDir.getChildren());
     }
 
 
@@ -173,9 +170,13 @@ public class Fat32Reader {
      */
     public String makeNamePretty(String currentName, int dirAttribute){
         if(dirAttribute == 8) return currentName;
+        int l = currentName.length();
+        if(currentName.charAt(l - 1) == (char)32 && currentName.charAt(l - 2) == (char)32 && currentName.charAt(l - 3) == (char)32){
+            return currentName.toLowerCase().replaceAll(" ", "");
+        }
         String prettyString = "";
         int extensionControl = 0;
-        for (int k = 0; k < currentName.length(); k++) {
+        for (int k = 0; k < l; k++) {
             if(currentName.charAt(k) != ' ' && extensionControl != 7) {
                 prettyString += Character.toString(currentName.charAt(k));
             } else if(extensionControl == 7){
@@ -277,7 +278,7 @@ public class Fat32Reader {
                     case 32: System.out.println("ATTR_ARCHIVE ");
                 }
                 int clusterNum = firstClusterNumber(dir);
-                System.out.println("Next cluster number is 0x" + clusterNum);
+                System.out.println("Next cluster number is 0x" + Integer.toHexString(clusterNum));
                 return;
             }
         }
@@ -326,8 +327,9 @@ public class Fat32Reader {
                     return;
                 }
                 else if(fileName.equals(dir.getName()) && !dir.isFile()){
-                    //Hashset containing all the names. if we already cd'ed into the file, no reason to re-perform all the calculations
-                    if (name.add(fileName)) {
+                    //Hashset containing all the names.
+                    // if we already cd'ed into the file, no reason to re-perform all the costly calculations
+                    if (nameMap.add(fileName)) {
                         getNewFileInfo(dir);
                         currentDir = dir;
                         Collections.sort(currentDir.getChildren());
@@ -340,7 +342,7 @@ public class Fat32Reader {
         }
     }
     /**
-     *The main method of to read files. we first use the low and high numbers of the file to check if it spans multiple clusters.
+     *The main method in order to read files. we first use the low and high numbers of the file to check if it spans multiple clusters.
      * If it does, we collect the beginnings of each cluster and read through it. We then collect all the information about
      * each file, similar to what was done when we read through the root. We then set the currentDir as the cd'ed dir.
      * We keep in mind that in the first cluster the "." and ".." are 32 bytes apart and then the rest of the files
@@ -362,7 +364,7 @@ public class Fat32Reader {
                     String currentName = getStringFromBytes(i, 11);
                     if (!currentName.contains("\u0000")) {
                         if(currentName.charAt(0) != (char)229) {
-                            String finalName = Normalizer.normalize(makeNamePretty(currentName, dirAttribute), Normalizer.Form.NFD);
+                            String finalName = makeNamePretty(currentName, dirAttribute);
                             dir.getChildren().add(new Directory(finalName, dirAttribute, size, low, hi, dir, i));
                         }
                     }
@@ -377,14 +379,15 @@ public class Fat32Reader {
                     String currentName = getStringFromBytes(i, 11);
                     if (!currentName.contains("\u0000")) {
                         if(currentName.charAt(0) != (char)229) {
-                            String finalName = Normalizer.normalize(makeNamePretty(currentName, dirAttribute), Normalizer.Form.NFD);
+                            String finalName =makeNamePretty(currentName, dirAttribute);
                             dir.getChildren().add(new Directory(finalName, dirAttribute, size, low, hi, dir, i));
                         }
                     }
                 }
             }
         }
-    }/**
+    }
+    /**
      *In order to check multiple cluster spans, we have to refer to the FAT table. This method collects all info about the
      * FAT table and uses the info in the FAT table to check if there's multiple clusters and put the start of each cluster
      * in an array. 268435448 = 0xF8FFFF0F which signals that no clusters continue after the current one. Otherwise we
@@ -402,7 +405,7 @@ public class Fat32Reader {
         int startOfDir = firstSectorofDirCluster * BPB_BytsPerSec;
         a.add(startOfDir);
         if(nextClus <= 268435447) {
-            getDirStarts(a, nextClus);
+            getDirStarts(a, nextClus); //recursively search the next cluster
         }
     }
 
@@ -420,10 +423,12 @@ public class Fat32Reader {
             }
         }
         System.out.println("Error: does not exist!");
-    }/**
-     *This method executes the actual reading. All we have to do is determine the start of the file
-     * using the firstClusterNumber method and then
-     * use our getStringFromBytes method to read until the upper limit. Then we print it out.
+    }
+    /**
+     * This was a complicated method, which prints out the file according to the limits given. We gather all the clusters
+     * that file is in and read from it. If our lower limit isn't until a few clusters in, then we skip the first clusters
+     * until we are in the cluster we need to be in. Then we start reading and appending as many clusters as we need
+     * until the higher limit. Then we print it all out.
      */
     public void readDir(Directory dir, String lower, String upper){
         int lo = Integer.parseInt(lower);
@@ -439,16 +444,16 @@ public class Fat32Reader {
         int count = 1;
         for(int i : dirStarts) {
             int current = (count * bytesPerCluster);
-            if(lo < current && hi <= current) {
+            if(lo < current && hi <= current) { //both the hi and lo are in one cluster
                 s.append(getStringFromBytes(i + lo, hi - lo ));
                 break;
             }
-            else if(lo < current && hi > current){
+            else if(lo < current && hi > current){ // it spans more thsn one cluster
                 s.append(getStringFromBytes(i + lo, bytesPerCluster - lo));
                 lo = 0;
                 hi = hi - bytesPerCluster;
             }
-            else{
+            else{ //we haven't hit the right cluster yet
                 lo -= bytesPerCluster;
                 hi -= bytesPerCluster;
             }
@@ -457,7 +462,10 @@ public class Fat32Reader {
         String finalString = s.toString();
         System.out.println(finalString);
     }
-
+    /**
+     *This method scans the FAT and determines the free clusters. They are considered free if the 4 bytes
+     * of the index is 0. It returns a list of the all the free clusters.
+     */
     public List<Integer> freeList(){
         int j = 0;
         FATOffSet = BPB_RootClus * 4;
@@ -472,36 +480,64 @@ public class Fat32Reader {
             j++;
 
         }
-        //System.out.println("Amount of free clusters: " + count);
         return freeClustersList;
 
 
     }
-
+    /**
+     *This method which is the first method we go to upon typing the "newfile" command
+     * parses the name of the new file to make it 11 bytes long.
+     */
     public void newfile(String name, String size) throws IOException{
-        int lengthOfName = name.length() - 4;
-        if(name.charAt(lengthOfName) != '.' || name.length() > 11){
-            System.out.println("You need an extention!"); return;
-        }
-        char[] name2 = new char[11];
-        int i;
-        for(i = 0; i < 8; i++){
-            if(i < lengthOfName) {
-                name2[i] = name.charAt(i);
-            } else{
-                name2[i] = (char)32;
+        for(Directory dir : currentDir.getChildren()){
+            if(name.equals(dir.getName())){
+                System.out.println(name + " is already taken! Choose a different name");
+                return;
             }
         }
-        for(int j = i; j < 11; j++) {
-            name2[j] = name.charAt(lengthOfName + 1);
-            lengthOfName++;
-        }
-        String newName = String.valueOf(name2);
         int s = Integer.parseInt(size);
-        makeNewFile(name, newName, s);
+        if(name.contains(".")) {
+            int lengthOfName = name.length() - 4;
+            char[] name2 = new char[11];
+            int i;
+            for (i = 0; i < 8; i++) {
+                if (i < lengthOfName) {
+                    name2[i] = name.charAt(i);
+                } else {
+                    name2[i] = (char) 32;
+                }
+            }
+            for (int j = i; j < 11; j++) {
+                name2[j] = name.charAt(lengthOfName + 1);
+                lengthOfName++;
+            }
+            String newName = String.valueOf(name2);
+            makeNewFile(name, newName, s);
+        }
+        else{
+            char[] name2 = new char[11];
+            int i;
+            for(i = 0; i < name.length(); i++){
+                if(i == 11) break;
+                name2[i] = name.charAt(i);
+            }
+            if(i < 11){
+                for(int j = i; j < name2.length; j++){
+                    name2[j] = (char)32;
+                }
+            }
+            String newName = String.valueOf(name2);
+            makeNewFile(name, newName, s);
+        }
     }
 
     //https://stackoverflow.com/questions/2183240/java-integer-to-byte-array
+    /**
+     *This next newfile method main deals with filling the 64 byte array with information about the new
+     *file, including the name, the time and date bytes, and the low and high bytes.
+     * Then we create a new Directory object with all this information and add it to the tree.
+     * Finally, we write to the actual disk drive all the new information.
+     */
     public void makeNewFile(String name, String newName, int size) throws IOException{
         updateFAT(size);
 
@@ -511,8 +547,7 @@ public class Fat32Reader {
         for(int i = 0; i < fileName.length; i++){
             newFile[i] = fileName[i];
         }
-        //newFile[27] = (byte) size;
-        newFile[11] = 32; //ordinary folder
+        newFile[11] = 32; //makes the file an ordinary file
         byte[] sizeArr = ByteBuffer.allocate(4).putInt(size).array();
         int count = 28;
         for(int i = 3; i >= 0; i--){ //putting in fileArr backwards to maintain endian-ness
@@ -524,30 +559,27 @@ public class Fat32Reader {
         ArrayList<String> list = getLowHigh();
         high = list.get(0) + list.get(1);
         low = list.get(2) + list.get(3);
-        int i = 0;
-        int j = 21;
-        int k = 27;
+        int i = 0, j = 21, k = 27;
         while(i < 2){
             newFile[j] = (byte)Integer.parseInt(list.get(i), 16);
-            i++;
-            j--;
+            newFile[k] = (byte)Integer.parseInt(list.get(i + 2), 16);
+            i++; j--; k--;
         }
-        while(i < 4){
-            newFile[k] = (byte)Integer.parseInt(list.get(i), 16);
-            k--;
-            i++;
-        }
+
         updateTime(newFile);
         int offsetOfFileInParent = writeFile(newFile);
 
         Directory dir = new Directory(name, 32, size, low, high, currentDir, offsetOfFileInParent);
         currentDir.getChildren().add(dir);
+        insertionSort(currentDir.getChildren()); //most of the files are sorted except new one, so can use insertion
         writeFileToDrive(dir);
         Files.write(this.p, this.data);
 
-
     }
-
+    /**
+     *This method write the string ""New File.\r\n" to the file over and over in each of the clusters until
+     * we read the size limit.
+     */
     public void writeFileToDrive(Directory dir){
         int size = dir.getSize();
         ArrayList<Integer> dirStarts = new ArrayList<>();
@@ -571,12 +603,18 @@ public class Fat32Reader {
 
 
     }
+    /**
+     *The method that sets the time and date bytes according to the Fatspec PDF.
+     * We only dealt with the "last modified" date and time and left the "created"
+     * date and time with 0 bytes.
+     */
     public void updateTime(byte[] newFile){
 
         String time = new SimpleDateFormat("HHmmss").format(new Date());
-        int hour = Integer.valueOf(time.substring(0,2)) * 1024 ;
+        int h = Integer.valueOf((time.substring(0,2)));
+        int hour = ((Integer.valueOf((time.substring(0,2)))) %  24) * 2048;
         int minute = Integer.valueOf(time.substring(2,4)) * 32;
-        int second = Integer.valueOf(time.substring(4, 6));
+        int second = Integer.valueOf(time.substring(4, 6))/2;
 
         int finalTime = hour + minute + second;
         byte b1 = (byte)(finalTime % 256);
@@ -584,10 +622,27 @@ public class Fat32Reader {
         newFile[22] = b1;
         newFile[23] = b2;
 
-    }
+        String date = new SimpleDateFormat("yyyyddMM").format(new Date());
+        int year = (Integer.valueOf(date.substring(0,4)) - 1980) * 512 ;
+        int month = Integer.valueOf(date.substring(6,8)) * 32;
+        int day = Integer.valueOf(date.substring(4, 6));
+        if(h >= 20){
+            day++;
+        }
+        int finalday = year + month + day;
+        b1 = (byte)(finalday % 256);
+        b2 = (byte)(finalday / 256);
+        newFile[24] = b1;
+        newFile[25] = b2;
 
+    }
+    /**
+     *Updates the FAT with info regarding info of the new file.
+     * If it spans more clusters, we update each one with the next cluster
+     * until the last cluster where we mark it as the end of the file.
+     */
     public void updateFAT(int size) throws IOException{
-        freeList();
+        freeList(); //need to get all the free clusters
         int n = size / bytesPerCluster + ((size % bytesPerCluster == 0) ? 0 : 1);
         if (n > 1){
             //span the clusters then at last cluster put eoc
@@ -614,9 +669,9 @@ public class Fat32Reader {
             eocBytesOnFAT(clusterOffset, 4);
         }
     }
-    /* so far this method gets the cluster number and correctly sets the high and low
-     * I think we need to make setters for high and low, what do you think?
-     *
+    /*
+     *Given the cluster number, we determine the low and high bytes
+     * for the file. complicated steps to get it in the correct endian-ness.
      */
     public ArrayList<String> getLowHigh(){
         ArrayList<String> list = new ArrayList<>();
@@ -647,73 +702,110 @@ public class Fat32Reader {
             String k = "" + hexes[i] + hexes[i + 1];
             list.add(k);
         }
-
-        System.out.println("low: " + low + "\nhigh: " + high);
-        System.out.println(list);
         return list;
     }
-
-    public int writeFile(byte[] newFile){
-        int highest = 0, count = 0;
-        for(Directory dir : currentDir.getChildren()){
-            if(dir.getName().charAt(0) == (char)229){
-                highest = dir.getOffsetInParent() - 64;
-                break;
-            }
-            if(dir.getOffsetInParent() > highest){
-                highest = dir.getOffsetInParent();
+    /**
+     * edits the main byte array of the entire disk with the 64 byte array info
+     */
+    public int writeFile(byte[] newFile)throws IOException{
+        int highest, count = 0;
+        ArrayList<Integer> dirStarts = new ArrayList<>();
+        N = firstClusterNumber(currentDir);
+        getDirStarts(dirStarts, N);
+        for(int start : dirStarts) {
+            for (int i = start; i < start + bytesPerCluster; i += 64) {
+                if (data[i] == -27) {
+                    for (int j = 0; j < 64; j++) {
+                        data[i] = newFile[j];
+                        i++;
+                    }
+                    return i - 64;
+                }
+                if (getBytes(i, 4) == 0) {
+                    for (int j = 0; j < 64; j++) {
+                        data[i] = newFile[j];
+                        i++;
+                    }
+                    return i - 64;
+                }
             }
         }
-        highest += 64;
+
+            //if we reach down here it means the current cluster is full and we need a new one
+        freeList();
+        N = firstClusterNumber(currentDir);
+        FATOffSet = N * 4;
+        FatSecNum = BPB_RsvdSecCnt + (FATOffSet / BPB_BytsPerSec);
+        FATEntOffset = FATOffSet % BPB_BytsPerSec;
+        int clusterOffset = FATOffSet + FatTableStart;
+        addBytesOnFAT(clusterOffset, 4, freeClustersList.get(0));
+        N = freeClustersList.get(0);
+        FATOffSet = N * 4;
+        FatSecNum = BPB_RsvdSecCnt + (FATOffSet / BPB_BytsPerSec);
+        FATEntOffset = FATOffSet % BPB_BytsPerSec;
+        clusterOffset = FATOffSet + FatTableStart;
+        eocBytesOnFAT(clusterOffset, 4);
+        int firstSectorofDirCluster = ((N - 2) * BPB_SecPerClus) + FirstDataSector;
+        highest = (firstSectorofDirCluster * BPB_BytsPerSec);
         for(int i = highest; i < highest + 64; i++){
             data[i] = newFile[count];
             count++;
         }
         return highest;
-    }
 
+    }
+    /**
+     * The first delete method after typing "delete" in the command line.
+     */
     public void delete(String name) throws IOException{
         for(int i = 0; i < currentDir.getChildren().size(); i++){
             if(name.equalsIgnoreCase(currentDir.getChildren().get(i).getName())){
                 delete(currentDir.getChildren().get(i));
-                data[currentDir.getChildren().get(i).getOffsetInParent()] =(byte)229;
-                currentDir.getChildren().remove(i);
+                data[currentDir.getChildren().get(i).getOffsetInParent()] =(byte)229; //set the entry as hidden
+                currentDir.getChildren().remove(i); //remove file from tree
                 Files.write(p, data);
-                freeList();
+                freeList(); //updates the new clusters
                 return;
             }
         }
         System.out.println("Error: File does not exist!");
 
-
-
     }
-
+    /**
+     *This is a complicated method which deletes both files and folders using recursion. If it's a file,
+     * delete it and edit the FAT. Otherwise if it's a folder, go into to the folder and recursively delete
+     * its contents. For debugging purposes I have the program print the name and type of file delete to
+     * see if the recursion is working properly and I believe it does. For example, when I delete "dir", it goes
+     * and deletes dir's files as well as "spec" and "fatspec.pdf" (which lie in "a")
+     */
     private void delete(Directory dir){
         if(!dir.isFile()){
             //meaning if dir is a folder, we have to go deeper and delete them too
-            if (this.name.add(dir.getName())) {
-                getNewFileInfo(dir);
+            if (this.nameMap.add(dir.getName())) {
+                getNewFileInfo(dir); // we can skip this step if we already had Cd'ed into that file
             }
             for(Directory d : dir.getChildren()){
                 boolean b = d.getName().equals(".")|| d.getName().equals("..");
                 if(!b) {
-                    delete(d); //the magical recursive statement that goes into the folder and deletes its contents
+                    delete(d);//the magical statement that goes into the folder and recursively deletes its contents
                 }
 
             }
-            System.out.print("folder deleted: " + dir.getName());
+            //System.out.print("folder deleted: " + dir.getName());
             N = firstClusterNumber(dir);
             deleteClusters(N);
-            System.out.println("   " +name.remove(dir.getName()));
             return;
         }
 
-        System.out.println("file deleted: " + dir.getName());
+        //System.out.println("file deleted: " + dir.getName());
         N = firstClusterNumber(dir);
         deleteClusters(N);
-        System.out.println("   " +name.remove(dir.getName()));
     }
+
+    /**
+     *Another recursive method that deletes contents in the FAT, continuing to the next index
+     * if it isn't an EOC.
+     */
     private void deleteClusters(int N){
         FATOffSet = N * 4;
         FatSecNum = BPB_RsvdSecCnt + (FATOffSet / BPB_BytsPerSec);
@@ -732,33 +824,62 @@ public class Fat32Reader {
         }
 
     }
-
+    /**
+     *puts 0's in the index and makes sure to edit both FAT tables
+     */
     public void zeroOutBytesOnFAT(int offset, int size){
         for(int i = offset; i < offset + size; i++){
             data[i] = (byte) 0;
-            data[i + FATSIZE] = (byte) 0;
+            data[i + FATSIZE] = (byte) 0; //edit both FATs
         }
     }
-
+    /**
+     *puts 0xF8 FF FF 0F in the index to signal an end of cluster
+     */
     public void eocBytesOnFAT(int offset, int size){
         byte[] arr = ByteBuffer.allocate(size).putInt(268435448).array();
         int count = 0;
         editBytesOnFAT(offset, size, arr, count);
     }
-
+    /**
+     *puts the next cluster in the index
+     */
     public void addBytesOnFAT(int offset, int size, int nextCluster)throws IOException{
         byte[] arr = ByteBuffer.allocate(size).putInt(nextCluster).array();
         int count = 0;
         editBytesOnFAT(offset, size, arr, count);
 
     }
-
+    /**
+     *edits both FATs with the new information
+     */
     private void editBytesOnFAT(int offset, int size, byte[] arr, int count) {
         for(int i = offset + size - 1; i >= offset; i--){
-            System.out.println(data[i]);
             data[i] = arr[count];
-            data[i + FATSIZE] = arr[count];
+            data[i + FATSIZE] = arr[count]; //edit both FATs
             count++;
+        }
+    }
+    //stackoverflow.com/questions/17432738/insertion-sort-using-string-compareto
+    /**
+     * We use insertion sort whenever we write new file. The reason being that insertion sort is super
+     * fast when most of the file is already sorted and all we need to do is sort that new file
+     * into place
+     */
+    private void insertionSort(ArrayList<Directory> arr){
+        int i,j;
+        Directory key;
+        for (j = 1; j < arr.size(); j++) { //the condition has changed
+            key = arr.get(j);
+            i = j - 1;
+            while (i >= 0) {
+                if (key.compareTo(arr.get(i)) > 0) {//here too
+                    break;
+                }
+                arr.set(i + 1, arr.get(i));
+                i--;
+            }
+            arr.set(i + 1, key);
         }
     }
 
